@@ -1,98 +1,124 @@
-/**
- * Copyright (C) 2021 Bosch Sensortec GmbH
- *
- * SPDX-License-Identifier: BSD-3-Clause
- * 
- */
-
 #include "Arduino.h"
 #include "bme68xLibrary.h"
 #include <led_controller.h>
 #include <log_serial.h>
-
 
 #ifndef PIN_CS
 #define PIN_CS SS
 #endif
 
 Bme68x bme;
+bme68xData data;
 
+uint32_t sensorId = 1;  
+float baselineGas = -1;
+float alpha = 0.02; // smoothing factor
+float dropThreshold = 0.20; // 20% drop = suspect cigarette
+int cigaretteCounter = 0;
+const int cigaretteConfirm = 3; // need 3 consecutive detections
+
+// ===== LED HELPERS =====
+void ledSleep()   { setColorRGB(255, 0, 0, 0.5); } // Red = sleeping
+void ledMeasure() { setColorRGB(0, 255, 0, 0.5); } // Green = measuring
+
+// ===== CONFIG HELPERS =====
+void configureForcedMode() {
+    bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X);
+    bme.setHeaterProf(300, 100); // temp 300°C, 100ms
+}
+
+void configureParallelMode() {
+    static uint16_t tempProf[] = {200, 250, 300, 350, 400};
+    static uint16_t durProf[]  = {100, 100, 100, 100, 100};
+    bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X);
+    bme.setHeaterProf(tempProf, durProf, 5);
+}
+
+// ===== SETUP =====
 void setup(void)
 {
     SPI.begin();
     Serial.begin(115200);
-    
-    while (!Serial)
-        delay(10);
-        
-    // Initialize sensor
+    while (!Serial) delay(10);
+
     bme.begin(PIN_CS, SPI);
     setLeds();
 
-    if(bme.checkStatus())
-    {
-        if (bme.checkStatus() == BME68X_ERROR)
-        {
+    if (bme.checkStatus()) {
+        if (bme.checkStatus() == BME68X_ERROR) {
             Serial.println("Sensor error:" + bme.statusString());
             return;
-        }
-        else if (bme.checkStatus() == BME68X_WARNING)
-        {
+        } else if (bme.checkStatus() == BME68X_WARNING) {
             Serial.println("Sensor Warning:" + bme.statusString());
         }
     }
-    
-    // Set default configuration for temperature, pressure, humidity
-    bme.setTPH();
-    
-    
-    bme.setHeaterProf(300, 100);
 
-    // CSV header
+    configureForcedMode();
+
     Serial.println("id,index,millis,gas_index,mes_index,temperature,pressure,humidity,gas_resistance,status");
-    // Serial.println(bme.getMeasDur() * 1000);
-    // Serial.println(bme.getMeasDur());
 }
 
-unsigned long lastMeasurement = 0;
-const unsigned long interval = 1000; // 10 s
-
+// ===== LOOP =====
 void loop() {
-    // if (millis() - lastMeasurement >= interval) {
-    //     lastMeasurement = millis();
+    // --- Forced mode measurement ---
+    ledMeasure();
+    bme.setOpMode(BME68X_FORCED_MODE);
+    delayMicroseconds(bme.getMeasDur()); // ensure ms delay
 
-        // bme.setOpMode(BME68X_SLEEP_MODE);
-        setColorRGB(255,0,0);//vermelho
-        delayMicroseconds(bme.getMeasDur());
+    if (bme.fetchData()) {
+        bme.getData(data);
 
-        // delay(4000);
-        // Trigger Forced Mode
-        bme.setOpMode(BME68X_FORCED_MODE);
+        if ((data.status & BME68X_GASM_VALID_MSK) && (data.status & BME68X_HEAT_STAB_MSK)) {
+            float R = data.gas_resistance;
 
-        // Wait for the full heater duration + measurement time
-        // unsigned long meas_duration_ms = 5000 + 100; // heater 10 s + 100 ms buffer
-        setColorRGB(0,255,0);//verde
-        
+            // --- Baseline update ---
+            if (baselineGas < 0) baselineGas = R;
+            baselineGas = baselineGas * (1 - alpha) + R * alpha;
 
-        // Read data
-        bme68xData data;
-        if (bme.fetchData()) {
-            bme.getData(data);
-            
-            logSerial(data, data.gas_index, bme.getUniqueId(), 0.0f);
+            float dropPercent = (baselineGas - R) / baselineGas;
+
+            logSerial(data, R, sensorId, dropPercent);
+
+            // --- Detect potential cigarette ---
+            if (dropPercent > dropThreshold) {
+                cigaretteCounter++;
+            } else {
+                cigaretteCounter = 0;
+            }
+
+            // --- Confirm cigarette using parallel mode ---
+            if (cigaretteCounter >= cigaretteConfirm) {
+                Serial.println("⚠️ Suspect cigarette detected. Switching to PARALLEL MODE...");
+
+                configureParallelMode();
+
+                for (int i = 0; i < 5; i++) { // reduced cycles for speed
+                    ledMeasure();
+                    bme.setOpMode(BME68X_PARALLEL_MODE);
+                    delayMicroseconds(bme.getMeasDur());
+
+                    while (bme.fetchData()) {
+                        bme.getData(data);
+                        if ((data.status & BME68X_GASM_VALID_MSK) &&
+                            (data.status & BME68X_HEAT_STAB_MSK)) {
+                            logSerial(data, data.gas_resistance, sensorId, dropPercent);
+                        }
+                    }
+                }
+
+                Serial.println("🚬 CONFIRMED: CIGARETTE detected!");
+                configureForcedMode();
+                cigaretteCounter = 0;
+            } else if (cigaretteCounter == 0) {
+                Serial.println("🌱 Natural air");
+            }
+
+        } else {
+            Serial.println("⚠️ Invalid gas measurement, skipping...");
         }
+    }
 
-        
-        // delay(4000);
-        
-    // }    
-
-        
-
-        // bme.setOpMode(BME68X_SLEEP_MODE);
-        // Serial.printf("Mode: %d\n", bme.getOpMode());
-        // if(bme.getOpMode() == 0){
-        //     setColorRGB(255,0,0);//vermelho
-        // }
-        
+    // --- Sleep phase ---
+    ledSleep();
+    delay(2000);
 }
