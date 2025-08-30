@@ -1,0 +1,87 @@
+/**
+ * Copyright (C) 2021 Bosch Sensortec GmbH
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ * 
+ */
+
+#include "Arduino.h"
+#include "bme68xLibrary.h"
+
+#ifndef PIN_CS
+#define PIN_CS SS
+#endif
+
+Bme68x bme;
+
+void setup(void)
+{
+    SPI.begin();
+    Serial.begin(115200);
+    
+    while (!Serial)
+        delay(10);
+        
+    // Initialize sensor
+    bme.begin(PIN_CS, SPI);
+
+    if(bme.checkStatus())
+    {
+        if (bme.checkStatus() == BME68X_ERROR)
+        {
+            Serial.println("Sensor error:" + bme.statusString());
+            return;
+        }
+        else if (bme.checkStatus() == BME68X_WARNING)
+        {
+            Serial.println("Sensor Warning:" + bme.statusString());
+        }
+    }
+    
+    // Set default configuration for temperature, pressure, humidity
+    bme.setTPH();
+    
+    // Heater: 320°C for 10,000 ms (10 s)
+    bme.setHeaterProf(320, 10000);
+
+    // CSV header
+    Serial.println("datetime,timestamp,temperature,pressure,humidity,gas_resistance,status");
+}
+
+unsigned long lastMeasurement = 0;
+const unsigned long interval = 10000; // 10 s
+
+void loop() {
+    if (millis() - lastMeasurement >= interval) {
+        lastMeasurement = millis();
+
+        // Trigger Forced Mode
+        bme.setOpMode(BME68X_FORCED_MODE);
+
+        // Wait for the full heater duration + measurement time
+        unsigned long meas_duration_ms = 10000 + 100; // heater 10 s + 100 ms buffer
+        delay(meas_duration_ms);
+
+        // Read data
+        bme68xData data;
+        if (bme.fetchData()) {
+            bme.getData(data);
+            
+            // Print CSV
+            Serial.print("NA,");                    // placeholder datetime
+            Serial.print(millis());                 // timestamp
+            Serial.print(",");
+            Serial.print(data.temperature, 2);      // 2 decimals
+            Serial.print(",");
+            Serial.print(data.pressure, 2);         // 2 decimals
+            Serial.print(",");
+            Serial.print(data.humidity, 2);         // 2 decimals
+            Serial.print(",");
+            Serial.print(data.gas_resistance, 2);   // 2 decimals
+            Serial.print(",");
+            Serial.printf("%e", data.gas_resistance); // scientific notation
+            Serial.print(",");
+            Serial.println(data.status, HEX);
+        }
+    }
+}
