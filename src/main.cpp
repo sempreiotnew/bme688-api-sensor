@@ -138,7 +138,7 @@ void loop() {
             Serial.println(baseline);
 
             if(percent > 15.0f){
-                Serial.println("CIGARRO");
+                Serial.println("-CIGARRO");
                 isCigarette = true;
             } else {
                 isCigarette = false;
@@ -149,10 +149,10 @@ void loop() {
 
     } else {
         setLastGasResistance(data.gas_resistance);
-        Serial.printf("Drop: %.2f %%\t\n", percentage);
-        Serial.printf("Rounded: %2.f %%\t\n", percentage);
-        Serial.printf("Baseline: %.2f \n", baseline);
-        Serial.printf("Temperature: %.2f C\n", temperature);
+        Serial.printf("-Drop: %.2f %%\t\n", percentage);
+        Serial.printf("-Rounded: %2.f %%\t\n", percentage);
+        Serial.printf("-Baseline: %.2f \n", baseline);
+        Serial.printf("-Temperature: %.2f C\n", temperature);
     }
     
 }

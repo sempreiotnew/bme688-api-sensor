@@ -18,6 +18,16 @@ void setForcedModeHeat(Bme68x& bme) {
     bme.setOpMode(BME68X_FORCED_MODE);
 }
 
+void setForcedModeTemp(Bme68x &bme, uint16_t heaterTemp) {
+    bme68xHeatrConf heatrConf;
+    heatrConf.enable = BME68X_ENABLE;
+    heatrConf.heatr_temp = heaterTemp;   // target heater temperature (°C)
+    heatrConf.heatr_dur = 100;           // ms, you can adjust
+    heatrConf.shared_heatr_dur = 0;
+
+    bme.setHeaterProf(heaterTemp, heatrConf.heatr_dur); // set heater temperature and duration
+    bme.setOpMode(BME68X_FORCED_MODE); // force single measurement
+}
 // Parallel mode: multiple steps heater profile
 void setParallelMode(Bme68x& bme) {
     static uint16_t tempProf[] = {200, 250, 300, 350, 400};
