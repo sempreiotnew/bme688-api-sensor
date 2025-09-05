@@ -12,13 +12,29 @@
 Bme68x bme;
 bme68xData data;
 float baseline = 0.0f;
-bool isKeepChecking = false;
-
 void stabilizationLED() { setColorRGB(0,0,255); } 
 void sleepLED() { setColorRGB(255,0,0); } 
 void measurementLED() { setColorRGB(0,255,0); } 
 void offLED() { setColorRGB(0,0,0); } 
 
+// --- New: simple data structure for collected readings ---
+struct Reading {
+    unsigned long t;       // millis timestamp
+    float gas_resistance;  
+    float temperature;
+    uint8_t gas_index;
+};
+
+#define PARALLEL_MAX_READS 200
+
+// forward declarations for helper functions we add
+void setParallelModeHP354(Bme68x& bme);
+void runParallelAnalysis(); 
+String analyzeFingerprint(Reading *arr, int nReads, float baselineValue);
+float getDropPercentage(float R);
+void setLastGasResistance(float R);
+
+// ----------------- setup() (unchanged except minor) -----------------
 void setup(void)
 {
     SPI.begin();
@@ -39,13 +55,14 @@ void setup(void)
         delayMicroseconds(bme.getMeasDur()); // wait for measurement
         if (bme.fetchData()) {
             bme.getData(data);
-            logSerial(data, data.gas_index, bme.getUniqueId(), 0.0f);
+            logSerial(data, 100, bme.getUniqueId(), 0.0f);
         }
         offLED();
         setForcedMode(bme); // trigger next forced measurement
     }
 }
 
+// ----------------- parallelMode helper you already had (kept) -----------------
 void parallelMode(){
     // Parallel measurements
     setParallelModeHP354(bme); // set parallel mode once
@@ -70,6 +87,8 @@ void parallelMode(){
     }
     delay(SLEEP_DELAY_MS);
 }
+
+// ----------------- getDropPercentage / baseline setter (unchanged) -----------------
 float getDropPercentage(float R){
     if (R <= 0 || baseline <= 0) return 0.0f; // safety check
 
@@ -88,13 +107,14 @@ void setLastGasResistance(float R){
     baseline = R;
 }
 
-
+// ----------------- Modified loop(): uses runParallelAnalysis() when >10% -----------------
 void loop() {
     // Sleep period
     setSleepMode(bme);
     delay(SLEEP_DELAY_MS);
     
     float temperature = 0;
+    float forcedResistance = 0;
     // Forced measurements
     for (int i = 0; i < MEASUREMENT_OVERSAMPLING; i++) {
         
@@ -106,49 +126,27 @@ void loop() {
         if(i == 1){ 
             temperature = data.temperature;
         }
-        logSerial(data, data.gas_index, bme.getUniqueId(), 0.0f);
+        logSerial(data, 99, bme.getUniqueId(), 0.0f);
+        if(i + 1 >= MEASUREMENT_OVERSAMPLING){
+            forcedResistance = data.gas_resistance;
+        }
     }
 
     offLED();
-    float percentage = getDropPercentage(data.gas_resistance);
+    Serial.printf("- CurrentBaseline: %.2f \n", baseline);
+    float percentage = getDropPercentage(forcedResistance);
     
 
     if(percentage > 10.0f){
-        float percent = percentage;
-        bool isCigarette = false;
-
-        do {
-            for (int i = 0; i < 20; i++) {
-                isCigarette ? sleepLED() : measurementLED();
-                setForcedModeHeat(bme); // trigger measurement
-                delayMicroseconds(bme.getMeasDur()); // wait for measurement to finish
-                
-                if (bme.fetchData()) bme.getData(data);
-                offLED();
-                
-                if(i == 1){ 
-                    temperature = data.temperature;
-                }
-                logSerial(data, data.gas_index, bme.getUniqueId(), 0.0f);
-                delay(1000);
-            }
-
-            percent = getDropPercentage(data.gas_resistance);
-            Serial.println(percent);
-            Serial.println(baseline);
-
-            if(percent > 15.0f){
-                Serial.println("-CIGARRO");
-                isCigarette = true;
-            } else {
-                isCigarette = false;
-                setLastGasResistance(data.gas_resistance);        
-            }
-        } while(percent > 10.0f);
+        // New behavior: enter parallel-mode analysis to get fingerprint
+        Serial.printf("-Drop %.2f%% > 10%%, switching to parallel analysis...\n", percentage);
+        
+        runParallelAnalysis();
+        
         offLED();
 
     } else {
-        setLastGasResistance(data.gas_resistance);
+        setLastGasResistance(forcedResistance);    
         Serial.printf("-Drop: %.2f %%\t\n", percentage);
         Serial.printf("-Rounded: %2.f %%\t\n", percentage);
         Serial.printf("-Baseline: %.2f \n", baseline);
@@ -156,5 +154,53 @@ void loop() {
     }
     
 }
+
+
+
+// ----------------- New function: runParallelAnalysis -----------------
+// Sets parallel profile, collects readings, logs them, then analyzes fingerprint.
+void runParallelAnalysis(){
+    // Set parallel profile (your implementation)
+    setParallelModeHP354(bme);
+
+    // Prepare collection buffer
+    Reading reads[PARALLEL_MAX_READS];
+    int idx = 0;
+    unsigned long startTime = millis();
+    uint16_t measDur = bme.getMeasDur(BME68X_PARALLEL_MODE) / 1000; // approx ms
+    if (measDur < 1) measDur = bme.getMeasDur() / 1000;
+
+    // Collect for a limited time / limited samples, whichever hits first
+    const unsigned long collectTimeout = 90000UL; // 90 seconds max collection
+    const int maxSamples = PARALLEL_MAX_READS;
+
+    Serial.println("-Starting parallel-mode collection...");
+    while ((millis() - startTime) < collectTimeout && idx < maxSamples) {
+        // Wait a bit longer than meas duration to ensure new fields ready
+        delay(measDur + 50);
+
+        if (bme.fetchData()) {
+            uint8_t nFieldsLeft = 0;
+            do {
+                nFieldsLeft = bme.getData(data);
+                if (data.status == NEW_GAS_MEAS) {
+                    // store reading (last gas_resistance for this field)
+                    reads[idx].t = millis();
+                    reads[idx].gas_resistance = data.gas_resistance;
+                    reads[idx].temperature = data.temperature;
+                    reads[idx].gas_index = data.gas_index;
+                    logSerial(data, data.gas_index, bme.getUniqueId(), 0.0f);
+                    idx++;
+                    if (idx >= maxSamples) break;
+                }
+            } while (nFieldsLeft);
+        }
+        measurementLED();
+    }
+
+    Serial.printf("-Collected %d parallel readings\n", idx);
+    
+}
+
 
 
