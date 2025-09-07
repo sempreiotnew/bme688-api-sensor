@@ -48,6 +48,22 @@ void setParallelModeHP354(Bme68x& bme) {
     bme.setOpMode(BME68X_PARALLEL_MODE);
 }
 
+// Parallel mode: Bosch HP501 heater profile (~26s cycle)
+void setParallelModeHP501(Bme68x& bme) {
+    // Bosch official HP501 profile
+    static uint16_t tempProf[] = {210, 265, 265, 320, 320, 265, 210, 155, 100, 155};
+    // Durations converted to ms (AI Studio × 100ms units)
+    static uint16_t durProf[]  = {2400, 200, 2200, 200, 2200, 2400, 2400, 2400, 2400, 2400};
+    // Set oversampling (same as AI Studio default)
+    bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X);
+    // Shared heater duration not used (leave 0)
+    uint16_t sharedHeatrDur = 0;
+    // Apply 10-step profile
+    bme.setHeaterProf(tempProf, durProf, sharedHeatrDur, 10);
+    // Switch to parallel mode
+    bme.setOpMode(BME68X_PARALLEL_MODE);
+}
+
 void setSleepMode(Bme68x& bme){
     bme.setOpMode(BME68X_SLEEP_MODE);
 }

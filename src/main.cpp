@@ -34,6 +34,24 @@ String analyzeFingerprint(Reading *arr, int nReads, float baselineValue);
 float getDropPercentage(float R);
 void setLastGasResistance(float R);
 
+
+bool isStableSlope(float values[], int len, float slopeThresholdPercent) {
+    float sumSlope = 0;
+    for (int i = 1; i < len; i++) {
+        float prev = values[i-1];
+        float diffPercent = 0.0f;
+        if (prev > 0) {
+            diffPercent = (values[i] - prev) / prev * 100.0f;  // variação percentual
+        }
+        sumSlope += diffPercent;
+    }
+    float avgSlope = sumSlope / (len - 1);
+
+    Serial.printf("-Average slope %.6f %%\n", avgSlope);
+
+    return fabs(avgSlope) < slopeThresholdPercent;
+}
+
 // ----------------- setup() (unchanged except minor) -----------------
 void setup(void)
 {
@@ -141,7 +159,11 @@ void loop() {
         // New behavior: enter parallel-mode analysis to get fingerprint
         Serial.printf("-Drop %.2f%% > 10%%, switching to parallel analysis...\n", percentage);
         
-        runParallelAnalysis();
+        
+        while(true){
+            runParallelAnalysis();
+        }
+        
         
         offLED();
 
@@ -173,9 +195,13 @@ void runParallelAnalysis(){
     // Collect for a limited time / limited samples, whichever hits first
     const unsigned long collectTimeout = 90000UL; // 90 seconds max collection
     const int maxSamples = PARALLEL_MAX_READS;
-
+        int16_t values_index = 0;
+        float values[5];
     Serial.println("-Starting parallel-mode collection...");
     while ((millis() - startTime) < collectTimeout && idx < maxSamples) {
+
+
+
         // Wait a bit longer than meas duration to ensure new fields ready
         delay(measDur + 50);
 
@@ -189,6 +215,14 @@ void runParallelAnalysis(){
                     reads[idx].gas_resistance = data.gas_resistance;
                     reads[idx].temperature = data.temperature;
                     reads[idx].gas_index = data.gas_index;
+                    if(data.gas_index == 6.f){
+                        values[values_index] = data.gas_resistance;
+                        if(values_index >= 5){
+                            isStableSlope(values, values_index, 15.f);
+                            values_index = 0;
+                        }
+                        values_index++;
+                    }
                     logSerial(data, data.gas_index, bme.getUniqueId(), 0.0f);
                     idx++;
                     if (idx >= maxSamples) break;
