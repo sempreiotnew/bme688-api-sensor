@@ -39,7 +39,7 @@ void setParallelMode(Bme68x& bme) {
 
 // Parallel mode: multiple steps heater profile
 void setParallelModeHP354(Bme68x& bme) {
-    static uint16_t tempProf[] = {320, 100, 100, 100, 200, 200, 200, 320, 320, 320};
+    static uint16_t tempProf[] = {320, 120, 120, 120, 200, 200, 200, 320, 320, 320};
     static uint16_t durProf[]  = {5, 2, 10, 30, 5, 5, 5, 5, 5, 5};
     // static uint16_t durProf[]  = {700, 280, 1400, 4200, 700, 700, 700, 700, 700, 700};
     bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X);
