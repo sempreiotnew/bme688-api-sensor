@@ -8,11 +8,17 @@
 // Forced mode: single measurement
 void setForcedMode(Bme68x& bme) {
     bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X); // T,H,P oversampling
-    bme.setHeaterProf(300, 100); // heater temp 300°C, 100ms
+    bme.setHeaterProf(300, 600); // heater temp 300°C, 100ms
     bme.setOpMode(BME68X_FORCED_MODE);
 }
 
 void setForcedModeHeat(Bme68x& bme) {
+    bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X); // T,H,P oversampling
+    bme.setHeaterProf(180, 800); // heater temp 300°C, 100ms
+    bme.setOpMode(BME68X_FORCED_MODE);
+}
+
+void setForcedModeAlcohol(Bme68x& bme) {
     bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X); // T,H,P oversampling
     bme.setHeaterProf(150, 400); // heater temp 300°C, 100ms
     bme.setOpMode(BME68X_FORCED_MODE);
@@ -39,7 +45,7 @@ void setParallelMode(Bme68x& bme) {
 
 // Parallel mode: multiple steps heater profile
 void setParallelModeHP354(Bme68x& bme) {
-    static uint16_t tempProf[] = {320, 120, 120, 120, 200, 200, 200, 320, 320, 320};
+    static uint16_t tempProf[] = {320, 250, 300, 200, 200, 200, 200, 320, 320, 320};
     static uint16_t durProf[]  = {5, 2, 10, 30, 5, 5, 5, 5, 5, 5};
     // static uint16_t durProf[]  = {700, 280, 1400, 4200, 700, 700, 700, 700, 700, 700};
     bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X);
@@ -47,6 +53,29 @@ void setParallelModeHP354(Bme68x& bme) {
     bme.setHeaterProf(tempProf, durProf, sharedHeatrDur, 10); // 5-step heater profile
     bme.setOpMode(BME68X_PARALLEL_MODE);
 }
+
+// Parallel mode: multiple steps heater profile
+void setParallelModeCigarette(Bme68x& bme) {
+    //step 0 and 4 is good for total alcohol
+    // static uint16_t tempProf[] = {150, 320, 200, 200, 150, 150};
+    // static uint16_t durProf[]  = {5, 10, 10, 10, 5, 10};
+    //step 2 and 4 is good for total cigarette
+    // static uint16_t tempProf[] = {150, 320, 100, 300, 150, 150};
+    // static uint16_t durProf[]  = {5, 10, 10, 10, 5, 10};
+
+    //this works fine for both
+    // static uint16_t tempProf[] = {150, 320, 100, 300, 150, 150};
+    // static uint16_t durProf[]  = {30, 10, 10, 10, 10, 10};
+    static uint16_t tempProf[] = {200, 320, 100, 300, 200, 150};
+    static uint16_t durProf[]  = {30, 5, 5, 5, 5, 5};
+    bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X);
+    uint16_t sharedHeatrDur = 140 - (bme.getMeasDur(BME68X_PARALLEL_MODE) / 1000);
+    bme.setHeaterProf(tempProf, durProf, sharedHeatrDur, 5); // 5-step heater profile
+    
+    bme.setOpMode(BME68X_PARALLEL_MODE);
+}
+
+
 
 // Parallel mode: Bosch HP501 heater profile (~26s cycle)
 void setParallelModeHP501(Bme68x& bme) {

@@ -4,7 +4,7 @@
 #include <log_serial.h>
 #include <sensor_manager.h>
 
-#define STABILIZATION_COUNTER   400
+#define STABILIZATION_COUNTER   100
 #define SLEEP_DELAY_MS  10000
 #define MEASUREMENT_OVERSAMPLING 20 //Total measurements in forced mode 
 #define NEW_GAS_MEAS (BME68X_GASM_VALID_MSK | BME68X_HEAT_STAB_MSK | BME68X_NEW_DATA_MSK)
@@ -187,6 +187,8 @@ struct Reading {
 
 // forward declarations for helper functions we add
 void setParallelModeHP354(Bme68x& bme);
+void setParallelModeCigarette(Bme68x& bme);
+
 void runParallelAnalysis(); 
 // String analyzeFingerprint(Reading *arr, int nReads, float baselineValue);
 float getDropPercentage(float R);
@@ -321,66 +323,68 @@ void loop() {
         Serial.printf("-Drop %.2f%% > 10%%, switching to HP (300, 400) analysis...\n", percentage);
         
         
-        // while(true){
-        //     runParallelAnalysis();
-        // }
-        do{
-            float previousGas = 0;
-            unsigned long startMillis = millis();
-            float firstGas = 0;
-            float lastGas = 0;
-            for (int i = 0; i < MEASUREMENT_OVERSAMPLING; i++) {
+        while(true){
+            runParallelAnalysis();
+        }
+        // do{
+        //     float previousGas = 0;
+        //     unsigned long startMillis = millis();
+        //     float firstGas = 0;
+        //     float lastGas = 0;
+        //     for (int i = 0; i < MEASUREMENT_OVERSAMPLING; i++) {
                 
-                offLED();
-                setForcedModeHeat(bme); // trigger measurement
-                delayMicroseconds(bme.getMeasDur()); // wait for measurement to finish
-                if (bme.fetchData()) bme.getData(data);
-                measurementLED();
-                // if(i == 0){
-                //     previousGas = data.gas_resistance;
-                // }
-                if (i == 0) {
-                    firstGas = data.gas_resistance;   // baseline of this batch
-                }
-                lastGas = data.gas_resistance;       // keep updating until the last
-                if(i == 1){ 
-                    temperature = data.temperature;
-                }
-                logSerial(data, 99, bme.getUniqueId(), 0.0f);
+        //         offLED();
+        //         setForcedModeHeat(bme); // trigger measurement
+        //         delayMicroseconds(bme.getMeasDur()); // wait for measurement to finish
+        //         if (bme.fetchData()) bme.getData(data);
+        //         measurementLED();
+        //         // if(i == 0){
+        //         //     previousGas = data.gas_resistance;
+        //         // }
+        //         if (i == 0) {
+        //             firstGas = data.gas_resistance;   // baseline of this batch
+        //         }
+        //         lastGas = data.gas_resistance;       // keep updating until the last
+        //         if(i == 1){ 
+        //             temperature = data.temperature;
+        //         }
+        //         logSerial(data, 99, bme.getUniqueId(), 0.0f);
                 
-                // processReading(millis(), data.gas_resistance);
-                // calculatePercentVelocity(millis(), data.gas_resistance, previousGas, data.gas_index);
+        //         // processReading(millis(), data.gas_resistance);
+        //         // calculatePercentVelocity(millis(), data.gas_resistance, previousGas, data.gas_index);
                 
-                // if(i + 1 >= MEASUREMENT_OVERSAMPLING){
-                //     forcedResistance = data.gas_resistance;
-                //     percentage = getDropPercentage(forcedResistance);
-                //     // getDrop(millis(), data.gas_resistance, data.gas_index);
-                //     // getRecover(millis(), data.gas_resistance, data.gas_index);
-                //     Serial.printf("Percentage: %.2f" , percentage);
-                //     // processReading(millis(), data.gas_resistance);
-                //     // calculatePercentVelocity(millis(), data.gas_resistance, previousGas, data.gas_index);
-                // }
-            }
-                percentage = getDropPercentage(data.gas_resistance);
-                // unsigned long endMillis = millis();
-                // float deltaTime = (endMillis - startMillis) / 1000.0f; //time of measurements
-                // if (deltaTime <= 0) deltaTime = 0.001;
+        //         // if(i + 1 >= MEASUREMENT_OVERSAMPLING){
+        //         //     forcedResistance = data.gas_resistance;
+        //         //     percentage = getDropPercentage(forcedResistance);
+        //         //     // getDrop(millis(), data.gas_resistance, data.gas_index);
+        //         //     // getRecover(millis(), data.gas_resistance, data.gas_index);
+        //         //     Serial.printf("Percentage: %.2f" , percentage);
+        //         //     // processReading(millis(), data.gas_resistance);
+        //         //     // calculatePercentVelocity(millis(), data.gas_resistance, previousGas, data.gas_index);
+        //         // }
+        //     }
+        //         percentage = getDropPercentage(data.gas_resistance);
+        //         // unsigned long endMillis = millis();
+        //         // float deltaTime = (endMillis - startMillis) / 1000.0f; //time of measurements
+        //         // if (deltaTime <= 0) deltaTime = 0.001;
 
-                // float percentChange = ((lastGas - firstGas) / firstGas) * 100.0f;
-                // float velocityPercent = percentChange / deltaTime;
+        //         // float percentChange = ((lastGas - firstGas) / firstGas) * 100.0f;
+        //         // float velocityPercent = percentChange / deltaTime;
 
-                // Serial.printf("\n-Δ%%=%.2f over %.2fs => %.2f %%/s\n", 
-                //             percentChange, deltaTime, velocityPercent);
+        //         // Serial.printf("\n-Δ%%=%.2f over %.2fs => %.2f %%/s\n", 
+        //         //             percentChange, deltaTime, velocityPercent);
 
-                // if (velocityPercent < 0) {
-                //     Serial.printf("-DROP = %.2f %%/s\n", -velocityPercent);
-                // } else {
-                //     Serial.printf("-RECOVERY = %.2f %%/s\n", velocityPercent);
-                // }
-                Serial.printf("-Baseline Percentage %.2f", percentage);
-            offLED();
-        } while(percentage > 10.0f);
+        //         // if (velocityPercent < 0) {
+        //         //     Serial.printf("-DROP = %.2f %%/s\n", -velocityPercent);
+        //         // } else {
+        //         //     Serial.printf("-RECOVERY = %.2f %%/s\n", velocityPercent);
+        //         // }
+        //         Serial.printf("-Baseline Percentage %.2f\n", percentage);
+                
+        //     offLED();
+        // } while(percentage > 10.0f);
 
+        setLastGasResistance(forcedResistance);
 
     } else {
         setLastGasResistance(forcedResistance);    
@@ -398,7 +402,8 @@ void loop() {
 // Sets parallel profile, collects readings, logs them, then analyzes fingerprint.
 void runParallelAnalysis(){
     // Set parallel profile (your implementation)
-    setParallelModeHP354(bme);
+    // setParallelModeHP354(bme);
+    setParallelModeCigarette(bme);
 
     // Prepare collection buffer
     Reading reads[PARALLEL_MAX_READS];
