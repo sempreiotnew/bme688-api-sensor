@@ -8,13 +8,13 @@
 // Forced mode: single measurement
 void setForcedMode(Bme68x& bme) {
     bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X); // T,H,P oversampling
-    bme.setHeaterProf(300, 600); // heater temp 300°C, 100ms
+    bme.setHeaterProf(300, 100); // heater temp 300°C, 100ms
     bme.setOpMode(BME68X_FORCED_MODE);
 }
 
 void setForcedModeHeat(Bme68x& bme) {
     bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X); // T,H,P oversampling
-    bme.setHeaterProf(180, 800); // heater temp 300°C, 100ms
+    bme.setHeaterProf(150, 400); // heater temp 300°C, 100ms
     bme.setOpMode(BME68X_FORCED_MODE);
 }
 
