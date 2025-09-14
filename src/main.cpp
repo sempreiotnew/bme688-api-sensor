@@ -326,7 +326,7 @@ void loop() {
     while(true){
             runParallelAnalysis();
     }
-    // Sleep period
+    //Sleep period
     // setSleepMode(bme);
     // delay(SLEEP_DELAY_MS);
     
@@ -352,13 +352,13 @@ void loop() {
     // }
 
     // offLED();
-    // Serial.printf("- CurrentBaseline: %.2f \n", baseline);
+    // // Serial.printf("- CurrentBaseline: %.2f \n", baseline);
     // float percentage = getDropPercentage(forcedResistance);
     
 
     // if(percentage > 10.0f){
     //     // New behavior: enter parallel-mode analysis to get fingerprint
-    //     Serial.printf("-Drop %.2f%% > 10%%, switching to HP (300, 400) analysis...\n", percentage);
+    //     // Serial.printf("-Drop %.2f%% > 10%%, switching to HP (300, 400) analysis...\n", percentage);
         
         
     //     while(true){
@@ -428,10 +428,10 @@ void loop() {
 
     // } else {
     //     setLastGasResistance(forcedResistance);    
-    //     Serial.printf("-Rounded: %2.f %%\t\n", percentage);
-    //     Serial.printf("-Baseline: %.2f \n", baseline);
-    //     Serial.printf("-Baseline Drop: %.2f %%\t\n", percentage);
-    //     Serial.printf("-Temperature: %.2f C\n", temperature);
+    //     // Serial.printf("-Rounded: %2.f %%\t\n", percentage);
+    //     // Serial.printf("-Baseline: %.2f \n", baseline);
+    //     // Serial.printf("-Baseline Drop: %.2f %%\t\n", percentage);
+    //     // Serial.printf("-Temperature: %.2f C\n", temperature);
     // }
     
 }
@@ -503,26 +503,20 @@ bool isArrayStepsFullFilled(){
 }
 
 void setAuxArrays(){
-    // Serial.println("-start memcpy!");
     memcpy(gas0Aux, gas0, sizeof(gas0));
     memcpy(gas1Aux, gas1, sizeof(gas1));
     memcpy(gas2Aux, gas2, sizeof(gas2));
     memcpy(gas3Aux, gas3, sizeof(gas3));
     memcpy(gas4Aux, gas4, sizeof(gas4));
-    // Serial.println("-end memcpy!");
 
 }
 
 void setAuxArraysEmpty(){
-    lastGas2 = gas2[4];
-    // Serial.printf("-last gas %.2f", lastGas2);
-    // Serial.println("-clear memset!");
     memset(gas0, 0, sizeof(gas0));
     memset(gas1, 0, sizeof(gas1));
     memset(gas2, 0, sizeof(gas2));
     memset(gas3, 0, sizeof(gas3));
     memset(gas3, 0, sizeof(gas4));
-    // Serial.println("-end memset!");
     gas0Idx = 0;
     gas1Idx = 0;
     gas2Idx = 0;
@@ -617,12 +611,255 @@ float getPercentLogRange(float R, float Rmax, float Rmin, Mode mode) {
     return pct;
 }
 
+#define MAX_STEPS 5
+float dropFingerprint[MAX_STEPS];
+
+void buildFingerprint(float valuesPerStep[MAX_STEPS], float baseline) {
+  for (int i = 0; i < MAX_STEPS; i++) {
+    dropFingerprint[i] = getDropPercentageLogarithm(valuesPerStep[i], baseline);
+  }
+}
+
+// String classifyFingerprint() {
+//   // Normalize
+//   float maxVal = 0;
+//   for (int i = 0; i < MAX_STEPS; i++) if (dropFingerprint[i] > maxVal) maxVal = dropFingerprint[i];
+//   float norm[MAX_STEPS];
+//   for (int i = 0; i < MAX_STEPS; i++) norm[i] = (maxVal > 0) ? dropFingerprint[i] / maxVal : 0;
+
+//   // Count how many "strong dips" above 0.6
+//   int strongCount = 0;
+//   for (int i = 0; i < MAX_STEPS; i++) {
+//     if (norm[i] > 0.6) strongCount++;
+//   }
+
+//   // Heuristic classification
+//   if (strongCount >= 2) {
+//     return "Alcohol";
+//   } else if (strongCount == 1) {
+//     return "Cigarette";
+//   } else {
+//     return "Unknown";
+//   }
+// }
+
+// // Assumes dropFingerprint[MAX_STEPS] is already filled with drop % per step (0..100)
+// String classifyFingerprint() {
+//   // --- normalize
+//   float maxVal = 0.0f;
+//   for (int i = 0; i < MAX_STEPS; i++) if (dropFingerprint[i] > maxVal) maxVal = dropFingerprint[i];
+
+//   float norm[MAX_STEPS];
+//   for (int i = 0; i < MAX_STEPS; i++) norm[i] = (maxVal > 0.0f) ? dropFingerprint[i] / maxVal : 0.0f;
+
+//   // --- print fingerprint initialized with '-'
+//   String fp = "";
+//   for (int i = 0; i < MAX_STEPS; i++) {
+//     if (i) fp += ",";
+//     fp += String(norm[i], 2); // two decimals
+//   }
+//   Serial.print("-Fingerprint: ");
+//   Serial.println(fp);
+
+//   // --- parameters (tune these if needed)
+//   const float peakThreshold = 0.45f;   // value (0..1) to consider a "strong" peak
+//   const float smallThreshold = 0.18f;  // value (0..1) to consider part of the event width
+//   const float asymThreshold = 0.22f;   // asymmetry threshold to trigger "right drift"
+
+//   // --- find peaks (local maxima above peakThreshold)
+//   int peakIdxs[MAX_STEPS];
+//   int peakCount = 0;
+//   int maxIndex = 0;
+//   float maxValNorm = 0.0f;
+//   for (int i = 0; i < MAX_STEPS; i++) {
+//     if (norm[i] > maxValNorm) {
+//       maxValNorm = norm[i];
+//       maxIndex = i;
+//     }
+//     float left = (i > 0) ? norm[i - 1] : -1.0f;
+//     float right = (i < MAX_STEPS - 1) ? norm[i + 1] : -1.0f;
+//     bool localMax = (norm[i] >= left) && (norm[i] >= right);
+//     if (localMax && norm[i] >= peakThreshold) {
+//       peakIdxs[peakCount++] = i;
+//     }
+//   }
+
+//   // --- compute width around dominant peak (count contiguous steps >= smallThreshold)
+//   int start = maxIndex, end = maxIndex;
+//   while (start > 0 && norm[start - 1] >= smallThreshold) start--;
+//   while (end < MAX_STEPS - 1 && norm[end + 1] >= smallThreshold) end++;
+//   int widthSteps = end - start + 1;
+
+//   // --- compute asymmetry around dominant peak
+//   float sumLeft = 0.0f, sumRight = 0.0f, sumTotal = 0.0f;
+//   for (int i = 0; i < MAX_STEPS; i++) sumTotal += norm[i];
+//   for (int i = 0; i < maxIndex; i++) sumLeft += norm[i];
+//   for (int i = maxIndex + 1; i < MAX_STEPS; i++) sumRight += norm[i];
+//   float asym = 0.0f;
+//   if (sumTotal > 0.0f) asym = (sumRight - sumLeft) / sumTotal; // positive -> more on right
+
+//   // --- debug print
+//   Serial.printf("-peaks=%d maxIdx=%d width=%d asym=%.2f\n", peakCount, maxIndex, widthSteps, asym);
+
+//   // --- decision logic (heuristic)
+//   // 1) multiple strong peaks close together -> Alcohol (W-shape)
+//   if (peakCount >= 2) {
+//     // if first two peaks are close (adjacent or one step apart) it's classic W
+//     if (peakCount >= 2) {
+//       int d = abs(peakIdxs[1] - peakIdxs[0]);
+//       if (d <= 2) {
+//         Serial.println("-Decision: Alcohol (multi-peak close)");
+//         return "Alcohol";
+//       }
+//       // if peaks are separated but both strong, still likely alcohol
+//       Serial.println("-Decision: Alcohol (multi-peak)");
+//       return "Alcohol";
+//     }
+//   }
+
+//   // 2) single or no strong peak -> use width and asymmetry
+//   if (peakCount == 1) {
+//     // narrow spike (small width) => quick event (likely alcohol)
+//     if (widthSteps <= 2) {
+//       Serial.println("-Decision: Alcohol (narrow spike)");
+//       return "Alcohol";
+//     }
+
+//     // wide event or right-heavy energy => cigarette drift
+//     if (widthSteps >= 3 || asym > asymThreshold) {
+//       Serial.println("-Decision: Cigarette (wide/asymmetric right-drift)");
+//       return "Cigarette";
+//     }
+
+//     // default fallback for single peak
+//     Serial.println("-Decision: Cigarette (single peak fallback)");
+//     return "Cigarette";
+//   }
+
+//   // 3) no strong peaks — maybe low concentration or noisy: use coarse rules
+//   // if there is a mild right-drift, say cigarette; if two moderate adjacent bumps -> alcohol
+//   if (asym > asymThreshold) {
+//     Serial.println("-Decision: Cigarette (no strong peaks but right-drift)");
+//     return "Cigarette";
+//   }
+
+//   Serial.println("-Decision: Unknown");
+//   return "Unknown";
+// }
+
+// Detect only "Cigarette", otherwise return "Thinking" (and print diagnostics)
+String classifyFingerprint() {
+  // --- normalize
+  float maxVal = 0.0f;
+  for (int i = 0; i < MAX_STEPS; i++) if (dropFingerprint[i] > maxVal) maxVal = dropFingerprint[i];
+
+  float norm[MAX_STEPS];
+  for (int i = 0; i < MAX_STEPS; i++) norm[i] = (maxVal > 0.0f) ? dropFingerprint[i] / maxVal : 0.0f;
+
+  // --- print fingerprint
+  String fp = "";
+  for (int i = 0; i < MAX_STEPS; i++) {
+    if (i) fp += ",";
+    fp += String(norm[i], 2);
+  }
+  Serial.print("-Fingerprint: ");
+  Serial.println(fp);
+
+  // --- thresholds (tune if needed)
+  const float peakThreshold   = 0.50f;  // for optional peak count (not primary here)
+  const float smallThreshold  = 0.18f;  // used to compute width around dominant peak
+  const float asymThreshold   = 0.12f;  // right-drift threshold
+  const float step2Shallow    = 0.45f;  // if norm[2] <= step2Shallow => shallow step2 (evidence for cigarette)
+  const int   widthForCig     = 2;      // widthSteps >= this tends to indicate "slow drop"
+
+  // --- find dominant index and optional peak count
+  int peakCount = 0;
+  int maxIndex = 0;
+  float maxValNorm = 0.0f;
+  for (int i = 0; i < MAX_STEPS; i++) {
+    if (norm[i] > maxValNorm) {
+      maxValNorm = norm[i];
+      maxIndex = i;
+    }
+    float left = (i > 0) ? norm[i - 1] : -1.0f;
+    float right = (i < MAX_STEPS - 1) ? norm[i + 1] : -1.0f;
+    bool localMax = (norm[i] >= left) && (norm[i] >= right);
+    if (localMax && norm[i] >= peakThreshold) peakCount++;
+  }
+
+  // --- compute width around dominant peak (how many contiguous steps >= smallThreshold)
+  int start = maxIndex, end = maxIndex;
+  while (start > 0 && norm[start - 1] >= smallThreshold) start--;
+  while (end < MAX_STEPS - 1 && norm[end + 1] >= smallThreshold) end++;
+  int widthSteps = end - start + 1;
+
+  // --- compute asymmetry (right side energy minus left side)
+  float sumLeft = 0.0f, sumRight = 0.0f, sumTotal = 0.0f;
+  for (int i = 0; i < MAX_STEPS; i++) sumTotal += norm[i];
+  for (int i = 0; i < maxIndex; i++) sumLeft += norm[i];
+  for (int i = maxIndex + 1; i < MAX_STEPS; i++) sumRight += norm[i];
+  float asym = (sumTotal > 0.0f) ? (sumRight - sumLeft) / sumTotal : 0.0f; // positive -> more on right
+
+  // --- step2 safety
+  float step2 = 0.0f;
+  if (MAX_STEPS > 2) step2 = norm[2];
+
+  // --- print diagnostics
+  Serial.printf("-diag: peaks=%d maxIdx=%d width=%d asym=%.2f step2=%.2f\n", peakCount, maxIndex, widthSteps, asym, step2);
+
+  // --- cigarette detection rules (OR-combination of indicators)
+  bool isCigarette = false;
+
+  // 1) clear right drift + some width -> cigarette
+  if (asym > asymThreshold && widthSteps >= widthForCig) {
+    isCigarette = true;
+    Serial.println("-Reason: right-drift + width");
+  }
+
+  // 2) shallow step2 combined with width or drift -> cigarette (outdoor/indoor light smoke)
+  if (!isCigarette && MAX_STEPS > 2) {
+    if (step2 <= step2Shallow && (widthSteps >= widthForCig || asym > (asymThreshold/2.0f))) {
+      isCigarette = true;
+      Serial.println("-Reason: shallow step2 + width/drift");
+    }
+  }
+
+  // 3) edge peak behavior (peak at step 0 or last + drift/width) -> cigarette
+  if (!isCigarette) {
+    if ((maxIndex == 0 || maxIndex == (MAX_STEPS - 1)) && (widthSteps >= widthForCig || asym > asymThreshold)) {
+      isCigarette = true;
+      Serial.println("-Reason: edge peak + width/drift");
+    }
+  }
+
+  // 4) saturated but still shows right drift or wide -> still cigarette
+  if (!isCigarette) {
+    if (maxValNorm >= 0.9f && (asym > (asymThreshold/2.0f) || widthSteps >= (widthForCig + 1))) {
+      isCigarette = true;
+      Serial.println("-Reason: saturated + drift/width");
+    }
+  }
+
+  if (isCigarette) {
+    Serial.println("-Decision: Cigarette");
+    return "Cigarette";
+  }
+
+  // --- Not confident: print thinking output and return Thinking
+  Serial.println("-Thinking: not enough cigarette evidence");
+  Serial.printf("-Thinking values -> maxValNorm=%.2f width=%d asym=%.2f step2=%.2f peaks=%d\n",
+                maxValNorm, widthSteps, asym, step2, peakCount);
+  return "Thinking";
+}
+
+
+
 void showStatistics(float lastGas, int gas_index, float values[]){
     float temp = values[0];
     for(int i=0; i < MAX_READING_PER_STEP_PARALLEL_MODE; i++){
         Serial.printf("-------------------STEP %d------------------", gas_index);
         Serial.printf("\n-Previous: %.2f", lastGas );
-        Serial.printf("-Current: %.2f\n", values[i] );
+        Serial.printf("-Current: %.2f\n\n", values[i] );
         if (values[i] < temp) {
             temp = values[i];   // update if a smaller value is found
         }
@@ -631,17 +868,19 @@ void showStatistics(float lastGas, int gas_index, float values[]){
         float drop = getDropPercentageLogarithm(values[i], lastGas);
         float recovery = getRecoveryPercentageLogarithm(values[i], lastGas);
 
-        if(drop <= 0){
-            Serial.printf("-Recovery %.2f %%\n\n", recovery);
-            // float recoveryRange = getRecoveryPercentLogRange(temp, 102400000.f, 5684.85f);
-            float recoveryRange = getRecoveryPercentLogRange(temp, 102400000.f, 5684.85f);
-            
-            Serial.printf("-Recovery Range %.2f %%\n", recoveryRange);
-        } else {
-            Serial.printf("-Drop %.2f %%\n\n", drop);    
-            float dropRange = getDropPercentLogRange(temp, 102400000.f, 5684.85f);
-            Serial.printf("-Drop Range %.2f %%\n", dropRange );
-        }
+
+        dropFingerprint[gas_index] = drop;
+        
+        Serial.printf("-Recovery %.2f %%\n", recovery);
+        // float recoveryRange = getRecoveryPercentLogRange(temp, 102400000.f, 5684.85f);
+        float recoveryRange = getRecoveryPercentLogRange(temp, 102400000.f, 5684.85f);
+        
+        Serial.printf("-Recovery Range %.2f %%\n\n", recoveryRange);
+    
+        Serial.printf("-Drop %.2f %%\n", drop);    
+        float dropRange = getDropPercentLogRange(temp, 102400000.f, 5684.85f);
+        Serial.printf("-Drop Range %.2f %%\n\n", dropRange );
+        
         
     }
 
@@ -654,6 +893,7 @@ void showStatistics(float lastGas, int gas_index, float values[]){
     Serial.println("\n");
 
     
+    classifyFingerprint();
 }
 
 void isCigarette(){
@@ -720,14 +960,16 @@ void runParallelAnalysis(){
         
     }
     
-    Serial.printf("-Collected %d parallel readings\n", idx);
-    if(isArrayStepsFullFilled()){
-        setAuxArrays();
-        isCigarette();    
-    } else {
-        Serial.println("-Not full filled");
-        setAuxArraysEmpty();
-    }
+    // Serial.printf("-Collected %d parallel readings\n", idx);
+    // if(isArrayStepsFullFilled()){
+    //     setAuxArrays();
+    //     isCigarette();    
+    //     String result = classifyFingerprint();
+    //     Serial.printf("-Detected: %s\n", result.c_str());
+    // } else {
+    //     Serial.println("-Not full filled");
+    //     setAuxArraysEmpty();
+    // }
     
 }
 
