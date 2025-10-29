@@ -5,10 +5,22 @@
 
 #include "bme68xLibrary.h"
 
+void setForcedModeCalib(Bme68x& bme) {
+    bme.setTPH(BME68X_OS_1X, BME68X_OS_1X, BME68X_OS_1X); // T,H,P oversampling
+    bme.setHeaterProf(350, 100); // heater temp 300°C, 100ms
+    bme.setOpMode(BME68X_FORCED_MODE);
+}
+
 // Forced mode: single measurement
 void setForcedMode(Bme68x& bme) {
-    bme.setTPH(BME68X_OS_4X, BME68X_OS_2X, BME68X_OS_16X); // T,H,P oversampling
-    bme.setHeaterProf(300, 100); // heater temp 300°C, 100ms
+    bme.setTPH(BME68X_OS_1X, BME68X_OS_1X, BME68X_OS_1X); // T,H,P oversampling
+    bme.setHeaterProf(350, 980); // heater temp 300°C, 100ms
+    bme.setOpMode(BME68X_FORCED_MODE);
+}
+
+void setForcedModeParameters(Bme68x& bme, uint8_t osTemp, uint8_t osPres, uint8_t osHum) {
+    bme.setTPH(osTemp, osPres, osHum); // T,H,P oversampling
+    bme.setHeaterProf(350, 980); // heater temp 300°C, 100ms
     bme.setOpMode(BME68X_FORCED_MODE);
 }
 
