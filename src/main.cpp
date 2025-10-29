@@ -13,12 +13,13 @@
 
 #define STABILIZATION_COUNTER   50
 #define STABILIZATION_DELAY_MS  1000
+#define SLEEP_MAX_READING 5
 #define NEW_GAS_MEAS (BME68X_GASM_VALID_MSK | BME68X_HEAT_STAB_MSK | BME68X_NEW_DATA_MSK)
 
 struct DataReading {
     float baseline;
     float gas_resistance;
-    bool sleep;
+    float temperature;
 };
 
 Bme68x bme;
@@ -57,34 +58,36 @@ void setup(void)
         counter++;
     }
 
-    dataReading.baseline = data.gas_resistance;
+    // dataReading.baseline = data.gas_resistance;
     
 }
 
 void getSensorDataSleep(){
+
+    dataReading.baseline = dataReading.gas_resistance;
+
+    for (int i=0; i < SLEEP_MAX_READING; i++) {
+        setForcedMode(bme);
+        setColorRGB(0,0,0);//off
+        delayMicroseconds(bme.getMeasDur());
+        setColorRGB(0,255,0);//verde
+        if (bme.fetchData()) bme.getData(data);
+        // setForcedMode(bme); // trigger next forced measurement
+        logSerial(data, data.gas_index, bme.getUniqueId(), 99);
+        // setColorRGB(0,0,0);
+        
+        if(data.status == NEW_GAS_MEAS){
+            dataReading.gas_resistance = data.gas_resistance;
+        }
+        
+    }
+
     setSleepMode(bme);
     setColorRGB(255,0,0);//vermelho
     // delay(STABILIZATION_DELAY_MS);
     delay(10000);
     setColorRGB(0,0,0);//off
 
-    setForcedMode(bme);
-    delayMicroseconds(bme.getMeasDur());
-    
-
-    for (int i=0; i < 1; i++) {
-        delayMicroseconds(bme.getMeasDur());
-        setColorRGB(0,255,0);//verde
-        if (bme.fetchData()) bme.getData(data);
-        setForcedMode(bme); // trigger next forced measurement
-        logSerial(data, data.gas_index, bme.getUniqueId(), 99);
-        // setColorRGB(0,0,0);
-        
-        if(data.status == NEW_GAS_MEAS){
-            dataReading.gas_resistance = data.gas_resistance;
-            dataReading.sleep = false;
-        }
-    }
 }
 
 void getSensorDataSenquential(){
@@ -112,13 +115,13 @@ void getSensorDataSenquential(){
 
     Serial.printf("-Drop: %.2f%% R %.2f  - B %.2f \n" , drop, data.gas_resistance, dataReading.baseline);
 
-    if(drop <= 0){
+    if(drop <= 5){
         thresholdCounter = thresholdCounter - 1;
     }
 
     if(thresholdCounter <= 0){
         keepReading = false;
-        dataReading.baseline = data.gas_resistance;
+        // dataReading.baseline = data.gas_resistance;
     }
 
     setColorRGB(0,0,0);//off
@@ -147,7 +150,9 @@ void loop() {
 
     float drop = getDropPercentage(dataReading.gas_resistance, dataReading.baseline);
     Serial.printf("-Drop: %.2f%% R %.2f  - B %.2f \n" , drop, dataReading.gas_resistance, dataReading.baseline);
-    if(drop >= 5.f){
+    if(drop >= 10.f){
         getSensorDataSenquential();
+    } else {
+        dataReading.baseline = data.gas_resistance;
     }
 }
