@@ -24,6 +24,11 @@ void setForcedModeParameters(Bme68x& bme, uint8_t osTemp, uint8_t osPres, uint8_
     bme.setOpMode(BME68X_FORCED_MODE);
 }
 
+void setForcedModeParametersDur(Bme68x& bme, uint8_t osTemp, uint8_t osPres, uint8_t osHum, uint16_t temp, uint16_t dur) {
+    bme.setTPH(osTemp, osPres, osHum); // T,H,P oversampling
+    bme.setHeaterProf(temp, dur); // heater temp 300°C, 100ms
+    bme.setOpMode(BME68X_FORCED_MODE);
+}
 // Parallel mode: multiple steps heater profile
 void setParallelMode(Bme68x& bme) {
     static uint16_t tempProf[] = {200, 250, 300, 350, 400};
