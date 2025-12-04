@@ -20,7 +20,7 @@ void setForcedMode(Bme68x& bme) {
 
 void setForcedModeParameters(Bme68x& bme, uint8_t osTemp, uint8_t osPres, uint8_t osHum) {
     bme.setTPH(osTemp, osPres, osHum); // T,H,P oversampling
-    bme.setHeaterProf(350, 980); // heater temp 300°C, 100ms
+    // bme.setHeaterProf(350, 980); // heater temp 300°C, 100ms
     bme.setOpMode(BME68X_FORCED_MODE);
 }
 
